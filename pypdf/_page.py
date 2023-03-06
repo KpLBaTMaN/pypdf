@@ -92,23 +92,23 @@ def set_custom_rtl(
     Args:
         _min: The new minimum value for the range of custom characters that
             will be written right to left.
-            If set to `None`, the value will not be changed.
+            If set to ``None``, the value will not be changed.
             If set to an integer or string, it will be converted to its ASCII code.
             The default value is -1, which sets no additional range to be converted.
         _max: The new maximum value for the range of custom characters that will
             be written right to left.
-            If set to `None`, the value will not be changed.
+            If set to ``None``, the value will not be changed.
             If set to an integer or string, it will be converted to its ASCII code.
             The default value is -1, which sets no additional range to be converted.
         specials: The new list of special characters to be inserted in the
             current insertion order.
-            If set to `None`, the current value will not be changed.
+            If set to ``None``, the current value will not be changed.
             If set to a string, it will be converted to a list of ASCII codes.
             The default value is an empty list.
 
     Returns:
-        A tuple containing the new values for `CUSTOM_RTL_MIN`,
-        `CUSTOM_RTL_MAX`, and `CUSTOM_RTL_SPECIAL_CHARS`.
+        A tuple containing the new values for ``CUSTOM_RTL_MIN``,
+        ``CUSTOM_RTL_MAX``, and ``CUSTOM_RTL_SPECIAL_CHARS``.
     """
     global CUSTOM_RTL_MIN, CUSTOM_RTL_MAX, CUSTOM_RTL_SPECIAL_CHARS
     if isinstance(_min, int):
@@ -206,8 +206,7 @@ class Transformation:
                                  e f 1
 
 
-    Example
-
+    Example:
         >>> from pypdf import Transformation
         >>> op = Transformation().scale(sx=2, sy=3).translate(tx=10, ty=20)
         >>> page.add_transformation(op)
@@ -260,7 +259,7 @@ class Transformation:
             ty: The translation along the y-axis.
 
         Returns:
-            A new `Transformation` instance
+            A new ``Transformation`` instance
         """
         m = self.ctm
         return Transformation(ctm=(m[0], m[1], m[2], m[3], m[4] + tx, m[5] + ty))
@@ -301,7 +300,7 @@ class Transformation:
             rotation: The angle of rotation in degrees.
 
         Returns:
-            A new `Transformation` instance with the rotated matrix.
+            A new ``Transformation`` instance with the rotated matrix.
         """
         rotation = math.radians(rotation)
         op: TransformationMatrixType = (
@@ -361,7 +360,6 @@ class PageObject(DictionaryObject):
         indirect_reference: Optional[IndirectObject] = None,
         indirect_ref: Optional[IndirectObject] = None,  # deprecated
     ) -> None:
-
         DictionaryObject.__init__(self)
         self.pdf: Union[None, PdfReaderProtocol, PdfWriterProtocol] = pdf
         if indirect_ref is not None:  # deprecated
@@ -608,6 +606,9 @@ class PageObject(DictionaryObject):
                 value.
             """
             value = page2res.raw_get(base_key)
+            # TODO : possible improvement : in case of writer, the indirect_reference
+            # can not be found because translated : this may be improved
+
             # try the current key first (e.g. "foo"), but otherwise iterate
             # through "foo-0", "foo-1", etc. new_res can contain only finitely
             # many keys, thus this'll eventually end, even if it's been crafted
@@ -632,7 +633,7 @@ class PageObject(DictionaryObject):
             DictionaryObject, res2.get(resource, DictionaryObject()).get_object()
         )
         rename_res = {}
-        for key in page2res.keys():
+        for key in page2res:
             unique_key, same_value = compute_unique_key(key)
             newname = NameObject(unique_key)
             if key != unique_key:
@@ -643,7 +644,7 @@ class PageObject(DictionaryObject):
                 if is_pdf_writer:
                     new_res[newname] = page2res.raw_get(key).clone(pdf)
                     try:
-                        new_res[newname] = new_res[key].indirect_reference
+                        new_res[newname] = new_res[newname].indirect_reference
                     except AttributeError:
                         pass
                 else:
@@ -696,9 +697,7 @@ class PageObject(DictionaryObject):
         pdf: Union[None, PdfReaderProtocol, PdfWriterProtocol],
         ctm: CompressedTransformationMatrix,
     ) -> ContentStream:
-        """
-        Add transformation matrix at the beginning of the given contents stream.
-        """
+        """Add transformation matrix at the beginning of the given contents stream."""
         a, b, c, d, e, f = ctm
         contents = ContentStream(contents, pdf)
         contents.operations.insert(
@@ -936,7 +935,11 @@ class PageObject(DictionaryObject):
                 trsf = Transformation(ctm)
             for a in cast(ArrayObject, page2[PG.ANNOTS]):
                 a = a.get_object()
-                aa = a.clone(pdf, ignore_fields=("/P", "/StructParent"))
+                aa = a.clone(
+                    pdf,
+                    ignore_fields=("/P", "/StructParent", "/Parent"),
+                    force_duplicate=True,
+                )
                 r = cast(ArrayObject, a["/Rect"])
                 pt1 = trsf.apply_on((r[0], r[1]), True)
                 pt2 = trsf.apply_on((r[2], r[3]), True)
@@ -956,6 +959,10 @@ class PageObject(DictionaryObject):
                         + cast(tuple, trsf.apply_on((q[4], q[5]), True))
                         + cast(tuple, trsf.apply_on((q[6], q[7]), True))
                     )
+                try:
+                    aa["/Popup"][NameObject("/Parent")] = aa.indirect_reference
+                except KeyError:
+                    pass
                 try:
                     aa[NameObject("/P")] = self.indirect_reference
                     annots.append(aa.indirect_reference)
@@ -1254,8 +1261,6 @@ class PageObject(DictionaryObject):
         self, page2: "PageObject", rotation: float, scale: float, expand: bool = False
     ) -> None:  # deprecated
         """
-        obsolete
-
         .. deprecated:: 1.28.0
 
             Use :meth:`merge_transformed_page` instead.
@@ -1895,9 +1900,9 @@ class PageObject(DictionaryObject):
                         elif (
                             abs(delta_y) < f * 0.3
                             and abs(delta_x) > current_spacewidth() * f * 15
+                            and (output + text)[-1] != " "
                         ):
-                            if (output + text)[-1] != " ":
-                                text += " "
+                            text += " "
                     elif orientation == 180:
                         if delta_y > 0.8 * f:
                             if (output + text)[-1] != "\n":
@@ -1914,9 +1919,9 @@ class PageObject(DictionaryObject):
                         elif (
                             abs(delta_y) < f * 0.3
                             and abs(delta_x) > current_spacewidth() * f * 15
+                            and (output + text)[-1] != " "
                         ):
-                            if (output + text)[-1] != " ":
-                                text += " "
+                            text += " "
                     elif orientation == 90:
                         if delta_x > 0.8 * f:
                             if (output + text)[-1] != "\n":
@@ -1933,9 +1938,9 @@ class PageObject(DictionaryObject):
                         elif (
                             abs(delta_x) < f * 0.3
                             and abs(delta_y) > current_spacewidth() * f * 15
+                            and (output + text)[-1] != " "
                         ):
-                            if (output + text)[-1] != " ":
-                                text += " "
+                            text += " "
                     elif orientation == 270:
                         if delta_x < -0.8 * f:
                             if (output + text)[-1] != "\n":
@@ -1952,9 +1957,9 @@ class PageObject(DictionaryObject):
                         elif (
                             abs(delta_x) < f * 0.3
                             and abs(delta_y) > current_spacewidth() * f * 15
+                            and (output + text)[-1] != " "
                         ):
-                            if (output + text)[-1] != " ":
-                                text += " "
+                            text += " "
                 except Exception:
                     pass
 
@@ -1977,13 +1982,12 @@ class PageObject(DictionaryObject):
                 for op in operands[0]:
                     if isinstance(op, (str, bytes)):
                         process_operation(b"Tj", [op])
-                    if isinstance(op, (int, float, NumberObject, FloatObject)):
-                        if (
-                            (abs(float(op)) >= _space_width)
-                            and (len(text) > 0)
-                            and (text[-1] != " ")
-                        ):
-                            process_operation(b"Tj", [" "])
+                    if isinstance(op, (int, float, NumberObject, FloatObject)) and (
+                        (abs(float(op)) >= _space_width)
+                        and (len(text) > 0)
+                        and (text[-1] != " ")
+                    ):
+                        process_operation(b"Tj", [" "])
             elif operator == b"Do":
                 output += text
                 if visitor_text is not None:
@@ -2051,7 +2055,7 @@ class PageObject(DictionaryObject):
         see function set_custom_rtl
 
         Additionally you can provide visitor-methods to get informed on all
-        operands and all text-objects.
+        operations and all text-objects.
         For example in some PDF files this can be useful to parse tables.
 
         Args:
@@ -2063,11 +2067,11 @@ class PageObject(DictionaryObject):
                 270 (turned Right)
             space_width: force default space width
                 if not extracted from font (default: 200)
-            visitor_operand_before: function to be called before processing an operand.
-                It has four arguments: operand, operand-arguments,
+            visitor_operand_before: function to be called before processing an operation.
+                It has four arguments: operator, operand-arguments,
                 current transformation matrix and text matrix.
-            visitor_operand_after: function to be called after processing an operand.
-                It has four arguments: operand, operand-arguments,
+            visitor_operand_after: function to be called after processing an operation.
+                It has four arguments: operator, operand-arguments,
                 current transformation matrix and text matrix.
             visitor_text: function to be called when extracting some text at some position.
                 It has five arguments: text, current transformation matrix,
@@ -2380,11 +2384,11 @@ def _get_fonts_walk(
     fontkeys = ("/FontFile", "/FontFile2", "/FontFile3")
     if "/BaseFont" in obj:
         fnt.add(cast(str, obj["/BaseFont"]))
-    if "/FontName" in obj:
-        if [x for x in fontkeys if x in obj]:  # test to see if there is FontFile
-            emb.add(cast(str, obj["/FontName"]))
+    if "/FontName" in obj and [x for x in fontkeys if x in obj]:
+        # the list comprehension ensures there is FontFile
+        emb.add(cast(str, obj["/FontName"]))
 
-    for key in obj.keys():
+    for key in obj:
         _get_fonts_walk(cast(DictionaryObject, obj[key]), fnt, emb)
 
     return fnt, emb  # return the sets for each page

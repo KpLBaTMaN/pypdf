@@ -1,5 +1,5 @@
+"""Test the pypdf._page module."""
 import json
-import os
 import random
 from copy import deepcopy
 from io import BytesIO
@@ -33,7 +33,7 @@ SAMPLE_ROOT = PROJECT_ROOT / "sample-files"
 
 def get_all_sample_files():
     meta_file = SAMPLE_ROOT / "files.json"
-    if not os.path.isfile(meta_file):
+    if not Path(meta_file).is_file():
         return {"data": []}
     with open(meta_file) as fp:
         data = fp.read()
@@ -44,7 +44,7 @@ def get_all_sample_files():
 all_files_meta = get_all_sample_files()
 
 
-@pytest.mark.samples
+@pytest.mark.samples()
 @pytest.mark.parametrize(
     "meta",
     [m for m in all_files_meta["data"] if not m["encrypted"]],
@@ -61,8 +61,8 @@ def test_read(meta):
     assert len(reader.pages) == meta["pages"]
 
 
-@pytest.mark.samples
-@pytest.mark.external
+@pytest.mark.samples()
+@pytest.mark.enable_socket()
 @pytest.mark.parametrize(
     ("pdf_path", "password"),
     [
@@ -180,6 +180,11 @@ def test_transformation_equivalence2():
     w.pages[0].merge_transformed_page(
         reader_comments.pages[0], Transformation().rotate(-15), True, True
     )
+    nb_annots1 = len(w.pages[0]["/Annots"])
+    w.pages[0].merge_transformed_page(
+        reader_comments.pages[0], Transformation().rotate(-30), True, True
+    )
+    assert len(w.pages[0]["/Annots"]) == 2 * nb_annots1
     # No special assert: Visual check the overlay has its comments at the good position
 
 
@@ -191,14 +196,14 @@ def test_get_user_unit_property():
 
 def compare_dict_objects(d1, d2):
     assert sorted(d1.keys()) == sorted(d2.keys())
-    for k in d1.keys():
-        if isinstance(d1[k], DictionaryObject):
-            compare_dict_objects(d1[k], d2[k])
+    for key in d1:
+        if isinstance(d1[key], DictionaryObject):
+            compare_dict_objects(d1[key], d2[key])
         else:
-            assert d1[k] == d2[k]
+            assert d1[key] == d2[key]
 
 
-@pytest.mark.slow
+@pytest.mark.slow()
 def test_page_transformations():
     pdf_path = RESOURCE_ROOT / "crazyones.pdf"
     reader = PdfReader(pdf_path)
@@ -273,12 +278,10 @@ def test_page_rotation():
     # test transfer_rotate_to_content
     page.rotation -= 90
     page.transfer_rotation_to_content()
-    assert (
-        abs(float(page.mediabox.left) - 0) < 0.1
-        and abs(float(page.mediabox.bottom) - 0) < 0.1
-        and abs(float(page.mediabox.right) - 792) < 0.1
-        and abs(float(page.mediabox.top) - 612) < 0.1
-    )
+    assert abs(float(page.mediabox.left) - 0) < 0.1
+    assert abs(float(page.mediabox.bottom) - 0) < 0.1
+    assert abs(float(page.mediabox.right) - 792) < 0.1
+    assert abs(float(page.mediabox.top) - 612) < 0.1
 
 
 def test_page_indirect_rotation():
@@ -330,7 +333,7 @@ def test_multi_language():
     set_custom_rtl(-1, -1, [])  # to prevent further errors
 
 
-@pytest.mark.external
+@pytest.mark.enable_socket()
 def test_extract_text_single_quote_op():
     url = "https://corpora.tika.apache.org/base/docs/govdocs1/964/964029.pdf"
     reader = PdfReader(BytesIO(get_pdf_from_url(url, name="tika-964029.pdf")))
@@ -338,7 +341,7 @@ def test_extract_text_single_quote_op():
         page.extract_text()
 
 
-@pytest.mark.external
+@pytest.mark.enable_socket()
 def test_no_ressources_on_text_extract():
     url = "https://github.com/py-pdf/pypdf/files/9428434/TelemetryTX_EM.pdf"
     reader = PdfReader(BytesIO(get_pdf_from_url(url, name="tika-964029.pdf")))
@@ -346,7 +349,7 @@ def test_no_ressources_on_text_extract():
         page.extract_text()
 
 
-@pytest.mark.external
+@pytest.mark.enable_socket()
 def test_iss_1142():
     # check fix for problem of context save/restore (q/Q)
     url = "https://github.com/py-pdf/pypdf/files/9150656/ST.2019.PDF"
@@ -364,8 +367,8 @@ def test_iss_1142():
     assert txt.find("郑州分公司") > 0
 
 
-@pytest.mark.external
-@pytest.mark.slow
+@pytest.mark.enable_socket()
+@pytest.mark.slow()
 @pytest.mark.parametrize(
     ("url", "name"),
     [
@@ -397,8 +400,8 @@ def test_extract_text_page_pdf(url, name):
         page.extract_text()
 
 
-@pytest.mark.external
-@pytest.mark.slow
+@pytest.mark.enable_socket()
+@pytest.mark.slow()
 def test_extract_text_page_pdf_impossible_decode_xform(caplog):
     url = "https://corpora.tika.apache.org/base/docs/govdocs1/972/972962.pdf"
     name = "tika-972962.pdf"
@@ -409,8 +412,8 @@ def test_extract_text_page_pdf_impossible_decode_xform(caplog):
     assert warn_msgs == [""]  # text extraction recognise no text
 
 
-@pytest.mark.external
-@pytest.mark.slow
+@pytest.mark.enable_socket()
+@pytest.mark.slow()
 def test_extract_text_operator_t_star():  # L1266, L1267
     url = "https://corpora.tika.apache.org/base/docs/govdocs1/967/967943.pdf"
     name = "tika-967943.pdf"
@@ -485,13 +488,12 @@ def test_extract_text_visitor_callbacks():
         It returns a tuple containing a list of extracted texts and
         a list of extracted rectangles.
         """
-
         logger = logging.getLogger("extract_text_and_rectangles")
 
         rectangles = []
         texts = []
 
-        def print_op_b(op, args, cm_matrix, tm_matrix):
+        def print_op_b(op, args, cm_matrix, tm_matrix) -> None:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"before: {op} at {cm_matrix}, {tm_matrix}")
             if op == b"re":
@@ -503,7 +505,7 @@ def test_extract_text_visitor_callbacks():
                 if (rect_filter is None) or rect_filter(r):
                     rectangles.append(r)
 
-        def print_visi(text, cm_matrix, tm_matrix, font_dict, font_size):
+        def print_visi(text, cm_matrix, tm_matrix, font_dict, font_size) -> None:
             if text.strip() != "":
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(f"at {cm_matrix}, {tm_matrix}, font size={font_size}")
@@ -598,7 +600,7 @@ def test_extract_text_visitor_callbacks():
             if r not in rectangle2texts:
                 curr_row.append("")
                 continue
-            cell_texts = [t for t in rectangle2texts[r]]
+            cell_texts = list(rectangle2texts[r])
             curr_row.append(cell_texts)
 
         return rows
@@ -612,7 +614,7 @@ def test_extract_text_visitor_callbacks():
     page_lrs_model = reader.pages[6]
 
     # We ignore the invisible large rectangles.
-    def ignore_large_rectangles(r):
+    def ignore_large_rectangles(r) -> bool:
         return r.w < 400 and r.h < 400
 
     (texts, rectangles) = extract_text_and_rectangles(
@@ -642,7 +644,7 @@ def test_extract_text_visitor_callbacks():
     page_revisions = reader.pages[2]
     # We ignore the second table, therefore: r.y > 350
 
-    def filter_first_table(r):
+    def filter_first_table(r) -> bool:
         return r.w > 1 and r.h > 1 and r.w < 400 and r.h < 400 and r.y > 350
 
     (texts, rectangles) = extract_text_and_rectangles(
@@ -683,19 +685,19 @@ def test_extract_text_visitor_callbacks():
     reader = PdfReader(RESOURCE_ROOT / "Sample_Td-matrix.pdf")
     page_td_model = reader.pages[0]
     # We store the translations of the Td-executions.
-    list_Td = []
+    list_td = []
 
-    def visitor_td(op, args, cm, tm):
+    def visitor_td(op, args, cm, tm) -> None:
         if op == b"Td":
-            list_Td.append((tm[4], tm[5]))
+            list_td.append((tm[4], tm[5]))
 
     page_td_model.extract_text(visitor_operand_after=visitor_td)
-    assert len(list_Td) == 4
+    assert len(list_td) == 4
     # Check the translations of the four Td-executions.
-    assert list_Td[0] == (210.0, 110.0)
-    assert list_Td[1] == (410.0, 110.0)
-    assert list_Td[2] == (210.0, 210.0)
-    assert list_Td[3] == (410.0, 210.0)
+    assert list_td[0] == (210.0, 110.0)
+    assert list_td[1] == (410.0, 110.0)
+    assert list_td[2] == (210.0, 210.0)
+    assert list_td[3] == (410.0, 210.0)
 
 
 @pytest.mark.parametrize(
@@ -853,10 +855,10 @@ def test_annotation_setter():
         writer.write(fp)
 
     # Cleanup
-    os.remove(target)  # remove for testing
+    Path(target).unlink()  # remove for testing
 
 
-@pytest.mark.external
+@pytest.mark.enable_socket()
 @pytest.mark.xfail(reason="#1091")
 def test_text_extraction_issue_1091():
     url = "https://corpora.tika.apache.org/base/docs/govdocs1/966/966635.pdf"
@@ -868,7 +870,7 @@ def test_text_extraction_issue_1091():
         page.extract_text()
 
 
-@pytest.mark.external
+@pytest.mark.enable_socket()
 def test_empyt_password_1088():
     url = "https://corpora.tika.apache.org/base/docs/govdocs1/941/941536.pdf"
     name = "tika-941536.pdf"
@@ -877,17 +879,17 @@ def test_empyt_password_1088():
     len(reader.pages)
 
 
-@pytest.mark.external
+@pytest.mark.enable_socket()
 def test_old_habibi():
     # this habibi has som multiple characters associated with the h
     reader = PdfReader(SAMPLE_ROOT / "015-arabic/habibi.pdf")
     txt = reader.pages[0].extract_text()  # very odd file
-    assert (
-        "habibi" in txt and "حَبيبي" in txt
-    )  # extract from acrobat reader "حَبيبي habibi􀀃􀏲􀎒􀏴􀎒􀎣􀋴
+    # extract from acrobat reader "حَبيبي habibi􀀃􀏲􀎒􀏴􀎒􀎣􀋴
+    assert "habibi" in txt
+    assert "حَبيبي" in txt
 
 
-@pytest.mark.samples
+@pytest.mark.samples()
 def test_read_link_annotation():
     reader = PdfReader(SAMPLE_ROOT / "016-libre-office-link/libre-office-link.pdf")
     assert len(reader.pages[0].annotations) == 1
@@ -917,7 +919,7 @@ def test_read_link_annotation():
     assert annot == expected
 
 
-@pytest.mark.external
+@pytest.mark.enable_socket()
 def test_no_resources():
     url = "https://github.com/py-pdf/pypdf/files/9572045/108.pdf"
     name = "108.pdf"
@@ -1090,18 +1092,29 @@ def test_merge_page_resources_smoke_test():
     assert relevant_operations == expected_operations
 
 
+@pytest.mark.enable_socket()
 def test_merge_transformed_page_into_blank():
-    url = "https://github.com/py-pdf/pypdf/files/10540507/visitcard.pdf"
-    name = "visitcard.pdf"
-    r = PdfReader(BytesIO(get_pdf_from_url(url, name=name)))
+    url = "https://github.com/py-pdf/pypdf/files/10768334/badges_3vjrh_7LXDZ_1-1.pdf"
+    name = "badges_3vjrh_7LXDZ_1.pdf"
+    r1 = PdfReader(BytesIO(get_pdf_from_url(url, name=name)))
+    url = "https://github.com/py-pdf/pypdf/files/10768335/badges_3vjrh_7LXDZ_2-1.pdf"
+    name = "badges_3vjrh_7LXDZ_2.pdf"
+    r2 = PdfReader(BytesIO(get_pdf_from_url(url, name=name)))
     w = PdfWriter()
+    w.add_blank_page(100, 100)
+    w.pages[0].merge_translated_page(r1.pages[0], 0, 0, True, True)
+    w.pages[0].merge_translated_page(r2.pages[0], 1000, 1000, True, True)
+    assert (
+        w.pages[0]["/Resources"]["/Font"].raw_get("/F2+0").idnum
+        != w.pages[0]["/Resources"]["/Font"].raw_get("/F2+0-0").idnum
+    )
     w.add_blank_page(100, 100)
     for x in range(4):
         for y in range(7):
-            w.pages[0].merge_translated_page(
-                r.pages[0],
-                x * r.pages[0].trimbox[2],
-                y * r.pages[0].trimbox[3],
+            w.pages[1].merge_translated_page(
+                r1.pages[0],
+                x * r1.pages[0].trimbox[2],
+                y * r1.pages[0].trimbox[3],
                 True,
                 True,
             )
